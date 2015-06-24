@@ -674,6 +674,7 @@ static void create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic)
     MemoryRegion *ecam_alias;
     MemoryRegion *ecam_reg;
     DeviceState *dev;
+    GPEXHost *s;
     char *nodename;
     int i;
 
@@ -701,8 +702,11 @@ static void create_pcie(const VirtBoardInfo *vbi, qemu_irq *pic)
     /* Map IO port space */
     sysbus_mmio_map(SYS_BUS_DEVICE(dev), 2, base_pio);
 
+    s = GPEX_HOST(dev);
+
     for (i = 0; i < GPEX_NUM_IRQS; i++) {
         sysbus_connect_irq(SYS_BUS_DEVICE(dev), i, pic[irq + i]);
+	 s->irq_num[i] = irq + i;
     }
 
     nodename = g_strdup_printf("/pcie@%" PRIx64, base);
