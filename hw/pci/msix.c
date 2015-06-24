@@ -223,6 +223,9 @@ static void msix_mask_all(struct PCIDevice *dev, unsigned nentries)
     }
 }
 
+extern uintptr_t qemu_host_page_size;
+extern uintptr_t qemu_host_page_mask;
+
 /* Initialize the MSI-X structures */
 int msix_init(struct PCIDevice *dev, unsigned short nentries,
               MemoryRegion *table_bar, uint8_t table_bar_nr,
@@ -243,7 +246,16 @@ int msix_init(struct PCIDevice *dev, unsigned short nentries,
     }
 
     table_size = nentries * PCI_MSIX_ENTRY_SIZE;
+
+    /* Align table size to host's page size otherwise vfio_dma_map will fail*/
+    table_size &= qemu_host_page_mask;
+    if (!table_size)
+       table_size = qemu_host_page_size;
+
     pba_size = QEMU_ALIGN_UP(nentries, 64) / 8;
+    pba_size &= qemu_host_page_mask;
+    if (!pba_size)
+       pba_size = qemu_host_page_size;
 
     /* Sanity test: table & pba don't overlap, fit within BARs, min aligned */
     if ((table_bar_nr == pba_bar_nr &&
