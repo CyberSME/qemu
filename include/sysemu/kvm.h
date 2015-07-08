@@ -49,6 +49,7 @@ extern bool kvm_eventfds_allowed;
 extern bool kvm_irqfds_allowed;
 extern bool kvm_resamplefds_allowed;
 extern bool kvm_msi_via_irqfd_allowed;
+extern bool kvm_msi_virt_doorbell;
 extern bool kvm_gsi_routing_allowed;
 extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
@@ -123,6 +124,14 @@ extern bool kvm_readonly_mem_allowed;
 #define kvm_msi_via_irqfd_enabled() (kvm_msi_via_irqfd_allowed)
 
 /**
+ * kvm_msi_virt_doorbell_enabled:
+ *
+ * Returns: true if we PCI MSI (Message Signaled Interrupt) needs
+ * Guest IOVA's to be programmed as MSI termination address in HW.
+ */
+#define kvm_msi_virt_doorbell_enabled() (kvm_msi_virt_doorbell)
+
+/**
  * kvm_gsi_routing_enabled:
  *
  * Returns: true if GSI routing is enabled (ie the kernel supports
@@ -154,6 +163,7 @@ extern bool kvm_readonly_mem_allowed;
 #define kvm_irqfds_enabled() (false)
 #define kvm_resamplefds_enabled() (false)
 #define kvm_msi_via_irqfd_enabled() (false)
+#define kvm_msi_virt_doorbell_enabled() (false)
 #define kvm_gsi_routing_allowed() (false)
 #define kvm_gsi_direct_mapping() (false)
 #define kvm_readonly_mem_enabled() (false)
