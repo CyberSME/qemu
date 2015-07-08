@@ -105,6 +105,7 @@ bool kvm_eventfds_allowed;
 bool kvm_irqfds_allowed;
 bool kvm_resamplefds_allowed;
 bool kvm_msi_via_irqfd_allowed;
+bool kvm_msi_virt_doorbell;
 bool kvm_gsi_routing_allowed;
 bool kvm_gsi_direct_mapping;
 bool kvm_allowed;

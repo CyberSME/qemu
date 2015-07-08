@@ -533,6 +533,81 @@ static void vfio_msi_interrupt(void *opaque)
     }
 }
 
+static int vfio_msi_set_virt_doorbell(VFIOPCIDevice *vdev, unsigned int nr,
+                                      MSIMessage *msg, bool msix, bool enable)
+{
+    int argsz;
+    struct vfio_pci_msi_virt_doorbell *virt_doorbell;
+    uint64_t *addr;
+    int ret;
+
+    argsz = sizeof(*virt_doorbell) + sizeof(*addr);
+
+    virt_doorbell = g_malloc0(argsz);
+    virt_doorbell->argsz = argsz;
+    virt_doorbell->start = nr;
+    virt_doorbell->count = 1;
+
+    addr = (uint64_t *) &virt_doorbell->data;
+
+    if (enable) {
+        virt_doorbell->flags = VFIO_PCI_MSI_SET_DOORBELL;
+    }
+
+    if (msix) {
+        virt_doorbell->flags |= VFIO_PCI_IS_MSIX;
+    }
+
+    *addr = msg->address;
+
+    ret = ioctl(vdev->vbasedev.fd, VFIO_DEVICE_PCI_MSI_VIRT_DOORBELL,
+                    virt_doorbell);
+    g_free(virt_doorbell);
+    if (ret) {
+        error_report("vfio: msi doorbell ioctl failed for vector, %d", ret);
+    }
+
+    return ret;
+}
+
+static void vfio_enable_virt_doorbell(VFIOPCIDevice *vdev, bool msix)
+{
+    int i;
+
+    for (i = 0; i < vdev->nr_vectors; i++) {
+        MSIMessage msg;
+
+        if (msix) {
+            msg = msix_get_message(&vdev->pdev, i);
+        } else {
+            msg = msi_get_message(&vdev->pdev, i);
+        }
+
+        if (msg.address) {
+            vfio_msi_set_virt_doorbell(vdev, i, &msg, msix, true);
+        }
+    }
+}
+
+static void vfio_disable_virt_doorbell(VFIOPCIDevice *vdev, bool msix)
+{
+    int i;
+
+    for (i = 0; i < vdev->nr_vectors; i++) {
+        MSIMessage msg;
+
+        if (msix) {
+            msg = msix_get_message(&vdev->pdev, i);
+        } else {
+            msg = msi_get_message(&vdev->pdev, i);
+        }
+
+        if (msg.address) {
+            vfio_msi_set_virt_doorbell(vdev, i, &msg, msix, false);
+        }
+    }
+}
+
 static int vfio_enable_vectors(VFIOPCIDevice *vdev, bool msix)
 {
     struct vfio_irq_set *irq_set;
@@ -560,7 +635,9 @@ static int vfio_enable_vectors(VFIOPCIDevice *vdev, bool msix)
          */
         if (vdev->msi_vectors[i].use) {
             if (vdev->msi_vectors[i].virq < 0 ||
-                (msix && msix_is_masked(&vdev->pdev, i))) {
+                (msix && msix_is_masked(&vdev->pdev, i)) ||
+                (kvm_gsi_direct_mapping() &&
+                (vdev->msi_vectors[i].virq >= 0))) {
                 fd = event_notifier_get_fd(&vdev->msi_vectors[i].interrupt);
             } else {
                 fd = event_notifier_get_fd(&vdev->msi_vectors[i].kvm_interrupt);
@@ -700,6 +777,10 @@ static int vfio_msix_vector_do_use(PCIDevice *pdev, unsigned int nr,
         }
     }
 
+    if (kvm_msi_virt_doorbell_enabled() && msg) {
+        vfio_enable_virt_doorbell(vdev, true);
+    }
+
     return 0;
 }
 
@@ -746,6 +827,8 @@ static void vfio_msix_vector_release(PCIDevice *pdev, unsigned int nr)
 
         g_free(irq_set);
     }
+
+    vfio_disable_virt_doorbell(vdev, true);
 }
 
 static void vfio_enable_msix(VFIOPCIDevice *vdev)
@@ -2127,12 +2210,21 @@ static void vfio_pci_write_config(PCIDevice *pdev, uint32_t addr,
         if (!was_enabled) {
             if (is_enabled) {
                 vfio_enable_msi(vdev);
+                if (kvm_msi_virt_doorbell_enabled()) {
+                    vfio_enable_virt_doorbell(vdev, false);
+                }
             }
         } else {
             if (!is_enabled) {
+                if (kvm_msi_virt_doorbell_enabled()) {
+                    vfio_disable_virt_doorbell(vdev, false);
+                }
                 vfio_disable_msi(vdev);
             } else {
                 vfio_update_msi(vdev);
+                if (kvm_msi_virt_doorbell_enabled()) {
+                    vfio_enable_virt_doorbell(vdev, false);
+                }
             }
         }
     } else if (pdev->cap_present & QEMU_PCI_CAP_MSIX &&
