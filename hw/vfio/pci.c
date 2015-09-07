@@ -552,6 +552,8 @@ static int vfio_msi_set_virt_doorbell(VFIOPCIDevice *vdev, unsigned int nr,
 
     if (enable) {
         virt_doorbell->flags = VFIO_PCI_MSI_SET_DOORBELL;
+    } else {
+        virt_doorbell->flags = VFIO_PCI_MSI_CLEAR_DOORBELL;
     }
 
     if (msix) {
